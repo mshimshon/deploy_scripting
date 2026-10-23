@@ -10,6 +10,28 @@ These utilities automate release preparation from Git commit history. They class
 - `utils/gitGetTrackTokenList.sh` classifies commit messages with configured tokens and maps changes to detected projects.
 - `prePushUtility.ps1` is a PowerShell helper for checking and consolidating commit messages before pushing.
 
+## Changelog generation
+
+Run `utils/generateChangelogs.sh -output <directory>` to create Markdown changelog files from classified commits. Each file starts with `# Changelog` and includes sections for configured feature, breaking-change, fix, and note headings. Entries are labeled `Feature:`, `Breaking:`, `Fix:`, or `Note:`. Use `-linkCommits` to include commit links; this requires a reachable `origin` remote.
+
+For example, with matching configured headings, output can look like:
+
+```markdown
+# Changelog
+
+## Features
+- Feature: add export option
+
+## Fixes
+- Fix: handle empty input
+```
+
+By default, entries are written to the global changelog file named by `globalChangelogName`. With `-autoSplitProject`, entries associated with detected projects are added to each project's `<project-name>.md` file and grouped under the project name in the global changelog. Entries without a detected project remain only in the global file. Use `-onlyProject <path>` to filter to one project and write to that project's file instead of splitting output. Empty headings are removed after generation.
+
+For a monorepo, treat the global changelog as the main release changelog: the main release is always produced. Project changelog files identify which subprojects had detected changes, so a build or release action can discover the affected project names from the generated files and decide which subprojects to release. Subprojects follow the same versioning rules as the main release, but their releases are optional and can be skipped when no relevant changes were detected. These scripts generate changelogs; the build or release action is responsible for making and applying that per-project release decision.
+
+Each configured release category can have multiple token patterns or aliases. The classifier evaluates feature, breaking, fix, and note patterns independently; therefore, a commit matching multiple categories can appear in multiple changelog sections. Matching commits are accumulated under their corresponding headings. Configure token patterns and headings in `config.sh` or override supported settings in `.github/config/deploy_utils.json`.
+
 The Bash scripts require Bash, Git, and `jq`, and run from a Git checkout. Configure the tracking branch, initial version, project extensions, release tokens, and changelog headings in `config.sh`. Supported values can also be overridden in `.github/config/deploy_utils.json`. Commit messages should follow the configured token conventions.
 
 ## Commit tokens
