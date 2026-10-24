@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["Build"] # 👈 Put the EXACT name of your build workflow here
+    types:
+      - completed
+  workflow_dispatch: # Keeps your manual trigger working
+
+concurrency:
+  group: deploy-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      id-token: write
+      actions: write
+      contents: write
+
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 👈 This forces GitHub to pull ALL history and tags
+
+      - name: Get Last Version Tag
+        id: get_last_version
+        run: |
+          LATEST_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1)
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+      - name: Calculate Version
+        id: get_version
+        run: |
+          # 1. Retrieve the tag from the independent step output
+          LATEST_TAG="${{ steps.get_last_version.outputs.tag }}"
+          
+          # 2. Run the script and capture output
+          if [ -n "$LATEST_TAG" ]; then
+            VERSION_NUM=$(/bin/bash "$GITHUB_WORKSPACE/utils/generateNewVersion.sh" -since-tag "$LATEST_TAG")
+          else
+            VERSION_NUM=$(/bin/bash "$GITHUB_WORKSPACE/utils/generateNewVersion.sh")
+          fi
+          
+          # 3. Check if the script failed (exit code was not 0)
+          if [ $? -ne 0 ]; then
+            echo "::error::Version generation script failed!"
+            exit 1 # This will officially crash the GitHub Actions step
+          fi
+
+          # 4. If it succeeded, save the output
+          echo "version=$VERSION_NUM" >> $GITHUB_OUTPUT
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish Console
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          WIN_OUT="/tmp/artifacts/output";
+          LINUX_OUT="/tmp/artifacts/output";
+          mkdir -p "$WIN_OUT"
+          mkdir -p "$LINUX_OUT"
+          dotnet publish "$GITHUB_WORKSPACE/commitCleaner.cs" \
+              --self-contained true \
+              -r linux-x64 \
+              -c Release \
+              -o "$LINUX_OUT" \
+              -p:PublishSingleFile=true \
+              -p:FileVersion=$VERSION \
+              -p:InformationalVersion=$VERSION \
+              -p:Version=$VERSION \
+              -p:AssemblyVersion=$VERSION
+
+          dotnet publish "$GITHUB_WORKSPACE/commitCleaner.cs" \
+              --self-contained true \
+              -r win-x64 \
+              -c Release \
+              -o "$WIN_OUT" \
+              -p:PublishSingleFile=true \
+              -p:FileVersion=$VERSION \
+              -p:InformationalVersion=$VERSION \
+              -p:Version=$VERSION \
+              -p:AssemblyVersion=$VERSION
+
+      - name: Generate Release Notes
+        id: generate_release_notes
+        run: |
+          LATEST_TAG="${{ steps.get_last_version.outputs.tag }}"
+
+          if [ -n "$LATEST_TAG" ]; then
+            /bin/bash "$GITHUB_WORKSPACE/utils/generateChangelogs.sh" -linkCommits -output "/tmp/artifacts/output" -since-tag "$LATEST_TAG"
+          else
+            /bin/bash "$GITHUB_WORKSPACE/utils/generateChangelogs.sh" -linkCommits -output "/tmp/artifacts/output"
+          fi
+
+          CHANGELOG_FILE="/tmp/artifacts/output/goodlife_changelog.md"
+          
+          if [ ! -f "$CHANGELOG_FILE" ]; then
+            echo "::error::Required file goodlife_changelog.md was not found in /tmp/artifacts/output!"
+            exit 1
+          elif [ ! -s "$CHANGELOG_FILE" ]; then
+            echo "::error::The changelog file goodlife_changelog.md exists but it is completely empty!"
+            exit 1
+          fi
+
+          echo "Changelog successfully generated and verified at $CHANGELOG_FILE"
+
+
+      - name: Create GitHub Release
+        if: steps.get_version.outputs.release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          body_path: "/tmp/artifacts/output/goodlife_changelog.md"
+          files: |
+            /tmp/artifacts/output/*.*

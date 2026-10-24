@@ -111,7 +111,9 @@ internal static class Program
 
 			CommitInfo headCommit = commits[commits.Count - 1];
 			bool headHasDirtyToken = TestConfiguredToken(headCommit.Message, ReleaseDirtyTokens);
+			bool headHasNoTriggerToken = TestConfiguredToken(headCommit.Message, ReleaseNoTriggerTokens);
 			WriteDebugInfo($"HEAD commit {headCommit.Hash} has a dirty token: {headHasDirtyToken}.");
+			WriteDebugInfo($"HEAD commit {headCommit.Hash} has a no-trigger token: {headHasNoTriggerToken}.");
 			var messageParts = new List<string>();
 			if (headHasDirtyToken) messageParts.Add(headCommit.Message.TrimEnd('\r', '\n'));
 
@@ -175,6 +177,11 @@ internal static class Program
 			WriteDebugInfo($"Creating replacement commit from {tempFile}.");
 			try { RunGit("commit", "-F", tempFile); }
 			catch { throw new InvalidOperationException($"Commit failed; staged changes and message file retained at {tempFile}."); }
+			if (headHasNoTriggerToken)
+			{
+				WriteDebugInfo("Tagging the replacement HEAD with skipci.");
+				RunGit("tag", "--force", "skipci");
+			}
 
 			File.Delete(tempFile);
 			WriteDebugInfo("Replacement commit completed; temporary file removed.");

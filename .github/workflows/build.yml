@@ -1,0 +1,83 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+    tags-ignore:
+      - '*skipci*'
+
+  workflow_dispatch:
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_TEST_RUNNER: Microsoft.Testing.Platform
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      id-token: write
+      actions: write
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 👈 This forces GitHub to pull ALL history and tags
+
+      - name: Calculate Version
+        id: get_version
+        run: |
+          # 1. Run the script and capture output
+          LATEST_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1)
+          if [ -n "$LATEST_TAG" ]; then
+            VERSION_NUM=$(/bin/bash "$GITHUB_WORKSPACE/utils/generateNewVersion.sh" -since-tag "$LATEST_TAG")
+          else
+            VERSION_NUM=$(/bin/bash "$GITHUB_WORKSPACE/utils/generateNewVersion.sh")
+          fi
+          
+          # 2. Check if the script failed (exit code was not 0)
+          if [ $? -ne 0 ]; then
+            echo "::error::Version generation script failed!"
+            exit 1 # This will officially crash the GitHub Actions step
+          fi
+
+          # 3. If it succeeded, save the output
+          echo "version=$VERSION_NUM" >> $GITHUB_OUTPUT
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish Console
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          WIN_OUT="/tmp/artifacts/output/win64";
+          LINUX_OUT="/tmp/artifacts/output/linux64";
+          mkdir -p "$WIN_OUT"
+          mkdir -p "$LINUX_OUT"
+          dotnet publish "$GITHUB_WORKSPACE/commitCleaner.cs" \
+              --self-contained true \
+              -r linux-x64 \
+              -c Release \
+              -o "$LINUX_OUT" \
+              -p:PublishSingleFile=true \
+              -p:FileVersion=$VERSION \
+              -p:InformationalVersion=$VERSION \
+              -p:Version=$VERSION \
+              -p:AssemblyVersion=$VERSION
+
+          dotnet publish "$GITHUB_WORKSPACE/commitCleaner.cs" \
+              --self-contained true \
+              -r win-x64 \
+              -c Release \
+              -o "$WIN_OUT" \
+              -p:PublishSingleFile=true \
+              -p:FileVersion=$VERSION \
+              -p:InformationalVersion=$VERSION \
+              -p:Version=$VERSION \
+              -p:AssemblyVersion=$VERSION
+
