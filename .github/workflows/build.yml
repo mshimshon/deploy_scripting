@@ -27,25 +27,32 @@ jobs:
         with:
           fetch-depth: 0 # 👈 This forces GitHub to pull ALL history and tags
 
+      - name: Get Last Version Tag
+        id: get_last_version
+        run: |
+          LATEST_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1)
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
       - name: Calculate Version
         id: get_version
         run: |
-          # 1. Run the script and capture output
-          LATEST_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1)
-          chmod +x "$GITHUB_WORKSPACE/utils/generateNewVersion.sh"
+          # 1. Retrieve the tag from the independent step output
+          LATEST_TAG="${{ steps.get_last_version.outputs.tag }}"
+          
+          # 2. Run the script and capture output
           if [ -n "$LATEST_TAG" ]; then
             VERSION_NUM=$(/bin/bash "$GITHUB_WORKSPACE/utils/generateNewVersion.sh" -since-tag "$LATEST_TAG")
           else
             VERSION_NUM=$(/bin/bash "$GITHUB_WORKSPACE/utils/generateNewVersion.sh")
           fi
           
-          # 2. Check if the script failed (exit code was not 0)
+          # 3. Check if the script failed (exit code was not 0)
           if [ $? -ne 0 ]; then
             echo "::error::Version generation script failed!"
             exit 1 # This will officially crash the GitHub Actions step
           fi
 
-          # 3. If it succeeded, save the output
+          # 4. If it succeeded, save the output
           echo "version=$VERSION_NUM" >> $GITHUB_OUTPUT
 
       - name: Setup .NET 10 SDK
