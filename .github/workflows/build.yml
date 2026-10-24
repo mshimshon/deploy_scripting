@@ -56,8 +56,8 @@ jobs:
       - name: Publish Console
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
-          WIN_OUT="/tmp/artifacts/output/win64";
-          LINUX_OUT="/tmp/artifacts/output/linux64";
+          WIN_OUT="/tmp/artifacts/output/win64"
+          LINUX_OUT="/tmp/artifacts/output/linux64"
           mkdir -p "$WIN_OUT"
           mkdir -p "$LINUX_OUT"
           dotnet publish "$GITHUB_WORKSPACE/commitCleaner.cs" \
