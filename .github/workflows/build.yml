@@ -34,7 +34,7 @@ jobs:
 
       - name: Get Last Version Tag
         id: get_last_version
-        shell: /bin/bash
+        shell: bash
         run: |
           # 1. Create a safe temp file to capture the stdout string
           TEMP_TAG_OUT=$(mktemp)
