@@ -41,9 +41,9 @@ jobs:
           
           # 2. Run the script and capture output
           if [ -n "$LATEST_TAG" ]; then
-            VERSION_NUM=$(/bin/bash "$GITHUB_WORKSPACE/utils/generateNewVersion.sh" -since-tag "$LATEST_TAG")
+            VERSION_NUM=$(/bin/bash "$GITHUB_WORKSPACE/utils/generateNewVersion.sh" -since-tag "$LATEST_TAG" 2>&1)
           else
-            VERSION_NUM=$(/bin/bash "$GITHUB_WORKSPACE/utils/generateNewVersion.sh")
+            VERSION_NUM=$(/bin/bash "$GITHUB_WORKSPACE/utils/generateNewVersion.sh" 2>&1)
           fi
           
           # 3. Check if the script failed (exit code was not 0)
