@@ -34,8 +34,25 @@ jobs:
 
       - name: Get Last Version Tag
         id: get_last_version
+        shell: /bin/bash
         run: |
-          LATEST_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1)
+          # 1. Create a safe temp file to capture the stdout string
+          TEMP_TAG_OUT=$(mktemp)
+          
+          # 2. Run the script using explicit bash, redirecting standard output to our temp file
+          "$GITHUB_WORKSPACE/utils/gitGetLatestRelease.sh" > "$TEMP_OUT"
+          EXIT_CODE=$?
+
+          # 3. Handle the explicit exit code requirements
+          if [ $EXIT_CODE -eq 2 ]; then
+            echo "Script returned exit code 2. Soft-handling: workflow will continue."
+          elif [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Script failed with unexpected exit code: $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
+
+          # 4. Extract the clean result and push it out to the runner environment
+          LATEST_TAG=$(cat "$TEMP_OUT" | tr -d '\r' | tail -n 1 | xargs)
           echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
 
 
