@@ -5,7 +5,6 @@ on:
     branches:
       - main
 
-
   workflow_dispatch:
 
 
@@ -13,12 +12,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      DOTNET_TEST_RUNNER: Microsoft.Testing.Platform
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       id-token: write
-      actions: write
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout Code
@@ -39,7 +36,7 @@ jobs:
           TEMP_TAG_OUT=$(mktemp)
           
           # 2. Run the script using explicit bash, redirecting standard output to our temp file
-          "$GITHUB_WORKSPACE/utils/gitGetLatestRelease.sh" > "$TEMP_OUT"
+          /bin/bash "$GITHUB_WORKSPACE/utils/gitGetLatestRelease.sh" > "$TEMP_OUT"
           EXIT_CODE=$?
 
           # 3. Handle the explicit exit code requirements
